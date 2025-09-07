@@ -88,27 +88,43 @@ async function runEda({ filePath, targetColumn, outputPath, maxRows = 50000 }) {
     lines.push('## Target Relationships (quick signals)');
     for (const [col, typ] of Object.entries(columnToType)) {
       if (col === targetColumn) continue;
-      if (typ === 'number' && typeof df[targetColumn].values[0] === 'number') {
-        const x = df[col].dropNa().values;
-        const y = df[targetColumn].dropNa().values;
-        const n = Math.min(x.length, y.length);
-        const xs = x.slice(0, n);
-        const ys = y.slice(0, n);
-        const meanX = xs.reduce((a, b) => a + b, 0) / n;
-        const meanY = ys.reduce((a, b) => a + b, 0) / n;
-        let num = 0;
-        let denX = 0;
-        let denY = 0;
-        for (let i = 0; i < n; i++) {
-          const dx = xs[i] - meanX;
-          const dy = ys[i] - meanY;
-          num += dx * dy;
-          denX += dx * dx;
-          denY += dy * dy;
+      if (typ === 'number' && columnToType[targetColumn] === 'number') {
+        const xSeries = df[col];
+        const ySeries = df[targetColumn];
+        const xs = [];
+        const ys = [];
+        for (let i = 0; i < df.shape[0]; i++) {
+          const xv = xSeries.values[i];
+          const yv = ySeries.values[i];
+          if (
+            typeof xv === 'number' && Number.isFinite(xv) &&
+            typeof yv === 'number' && Number.isFinite(yv)
+          ) {
+            xs.push(xv);
+            ys.push(yv);
+          }
         }
-        const corr = num / Math.sqrt(denX * denY || 1);
-        if (Number.isFinite(corr)) {
-          lines.push(`- corr(${col}, ${targetColumn}) = ${corr.toFixed(4)}`);
+        const n = xs.length;
+        if (n >= 2) {
+          const meanX = xs.reduce((a, b) => a + b, 0) / n;
+          const meanY = ys.reduce((a, b) => a + b, 0) / n;
+          let num = 0;
+          let denX = 0;
+          let denY = 0;
+          for (let i = 0; i < n; i++) {
+            const dx = xs[i] - meanX;
+            const dy = ys[i] - meanY;
+            num += dx * dy;
+            denX += dx * dx;
+            denY += dy * dy;
+          }
+          const denom = Math.sqrt(denX * denY);
+          if (denom > 0) {
+            const corr = num / denom;
+            if (Number.isFinite(corr)) {
+              lines.push(`- corr(${col}, ${targetColumn}) = ${corr.toFixed(4)}`);
+            }
+          }
         }
       }
     }
