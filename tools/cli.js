@@ -3,6 +3,9 @@ const WebBuilder = require('./builders/web-builder');
 const V3ToV4Upgrader = require('./upgraders/v3-to-v4-upgrader');
 const IdeSetup = require('./installer/lib/ide-setup');
 const path = require('node:path');
+const pathFs = require('node:fs');
+const { runEda } = require('./lib/eda');
+const { runMl } = require('./lib/ml');
 
 const program = new Command();
 
@@ -147,6 +150,94 @@ program
       dryRun: options.dryRun,
       backup: options.backup,
     });
+  });
+
+// Exploratory Data Analysis command
+program
+  .command('eda')
+  .description('Guide through exploratory data analysis of a provided dataset')
+  .requiredOption('-f, --file <path>', 'Path to dataset file (CSV or JSON)')
+  .option('-t, --target <column>', 'Optional target column for supervised problems')
+  .option('-o, --output <path>', 'Optional path to write a Markdown EDA report')
+  .option('--max-rows <n>', 'Limit rows to sample for speed (default 50000)', (v) => Number(v), 50000)
+  .action(async (options) => {
+    try {
+      const absoluteFilePath = path.isAbsolute(options.file)
+        ? options.file
+        : path.join(process.cwd(), options.file);
+
+      if (!pathFs.existsSync(absoluteFilePath)) {
+        console.error(`Dataset not found: ${absoluteFilePath}`);
+        process.exit(1);
+      }
+
+      const report = await runEda({
+        filePath: absoluteFilePath,
+        targetColumn: options.target,
+        outputPath: options.output ? (path.isAbsolute(options.output) ? options.output : path.join(process.cwd(), options.output)) : undefined,
+        maxRows: options.maxRows,
+      });
+
+      if (!options.output) {
+        console.log('\n----- EDA SUMMARY (Markdown) -----\n');
+        console.log(report);
+      } else {
+        console.log(`EDA report written to: ${options.output}`);
+      }
+    } catch (error) {
+      console.error('EDA failed:', error.message);
+      process.exit(1);
+    }
+  });
+
+// Traditional ML workflows command
+program
+  .command('ml')
+  .description('Run traditional ML workflows: regression, classification, or time-series forecasting')
+  .requiredOption('-f, --file <path>', 'Path to dataset file (CSV or JSON)')
+  .requiredOption('-k, --task <task>', 'Task: regression | classification | forecast')
+  .requiredOption('-t, --target <column>', 'Target column name')
+  .option('--features <cols>', 'Comma-separated feature column names (defaults to all except target)')
+  .option('--time-col <column>', 'Time column for forecasting tasks')
+  .option('--horizon <n>', 'Forecast horizon (default 12)', (v) => Number(v), 12)
+  .option('--test-size <ratio>', 'Test set ratio between 0 and 0.5 (default 0.2)', (v) => Number(v), 0.2)
+  .option('-o, --output <path>', 'Optional path to write a Markdown report of results')
+  .action(async (options) => {
+    try {
+      const absoluteFilePath = path.isAbsolute(options.file)
+        ? options.file
+        : path.join(process.cwd(), options.file);
+
+      if (!pathFs.existsSync(absoluteFilePath)) {
+        console.error(`Dataset not found: ${absoluteFilePath}`);
+        process.exit(1);
+      }
+
+      const features = options.features
+        ? options.features.split(',').map((s) => s.trim()).filter(Boolean)
+        : undefined;
+
+      const resultReport = await runMl({
+        task: options.task,
+        filePath: absoluteFilePath,
+        targetColumn: options.target,
+        featureColumns: features,
+        timeColumn: options.timeCol,
+        horizon: options.horizon,
+        testSize: options.testSize,
+        outputPath: options.output ? (path.isAbsolute(options.output) ? options.output : path.join(process.cwd(), options.output)) : undefined,
+      });
+
+      if (!options.output) {
+        console.log('\n----- ML RESULT SUMMARY (Markdown) -----\n');
+        console.log(resultReport);
+      } else {
+        console.log(`ML results written to: ${options.output}`);
+      }
+    } catch (error) {
+      console.error('ML workflow failed:', error.message);
+      process.exit(1);
+    }
   });
 
 program.parse();
