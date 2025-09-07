@@ -1,0 +1,169 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BMAD Web UI</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; }
+      section { border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; }
+      h2 { margin-top: 0; }
+      input, button, select { margin: 0.25rem 0; padding: 0.4rem 0.6rem; }
+      .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+      pre { background: #f8f8f8; padding: 1rem; border-radius: 6px; max-height: 300px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>BMAD Web Interface</h1>
+
+    <section>
+      <h2>Health</h2>
+      <button onclick="ping()">Ping</button>
+      <pre id="health"></pre>
+    </section>
+
+    <section>
+      <h2>Build</h2>
+      <div class="row">
+        <label><input type="checkbox" id="agentsOnly"/> agentsOnly</label>
+        <label><input type="checkbox" id="teamsOnly"/> teamsOnly</label>
+        <label><input type="checkbox" id="noExpansions"/> noExpansions</label>
+        <label><input type="checkbox" id="clean" checked/> clean</label>
+      </div>
+      <button onclick="build()">Run Build</button>
+      <pre id="buildOut"></pre>
+    </section>
+
+    <section>
+      <h2>List</h2>
+      <button onclick="listAgents()">List Agents</button>
+      <button onclick="listExpansions()">List Expansions</button>
+      <pre id="listOut"></pre>
+    </section>
+
+    <section>
+      <h2>Validate</h2>
+      <button onclick="validateConfigs()">Validate</button>
+      <pre id="validateOut"></pre>
+    </section>
+
+    <section>
+      <h2>EDA</h2>
+      <div class="row">
+        <input id="edaPath" placeholder="Absolute CSV/JSON path" size="40"/>
+        <input id="edaTarget" placeholder="target (optional)" />
+        <input id="edaMaxRows" placeholder="maxRows" type="number" value="50000" />
+        <button onclick="edaPath()">Run (path)</button>
+      </div>
+      <div class="row">
+        <input type="file" id="edaFile"/>
+        <input id="edaTarget2" placeholder="target (optional)" />
+        <button onclick="edaUpload()">Upload & Run</button>
+      </div>
+      <pre id="edaOut"></pre>
+    </section>
+
+    <section>
+      <h2>ML</h2>
+      <div class="row">
+        <select id="mlTask">
+          <option value="regression">regression</option>
+          <option value="classification">classification</option>
+          <option value="forecast">forecast</option>
+        </select>
+        <input id="mlPath" placeholder="Absolute CSV/JSON path" size="40"/>
+        <input id="mlTarget" placeholder="target"/>
+        <input id="mlFeatures" placeholder="features (comma)"/>
+        <input id="mlTimeCol" placeholder="timeCol (forecast)"/>
+        <input id="mlHorizon" type="number" value="12"/>
+        <input id="mlTestSize" type="number" step="0.01" value="0.2"/>
+        <button onclick="mlPath()">Run (path)</button>
+      </div>
+      <div class="row">
+        <input type="file" id="mlFile"/>
+        <input id="mlTarget2" placeholder="target"/>
+        <input id="mlFeatures2" placeholder="features (comma)"/>
+        <input id="mlTimeCol2" placeholder="timeCol (forecast)"/>
+        <input id="mlHorizon2" type="number" value="12"/>
+        <input id="mlTestSize2" type="number" step="0.01" value="0.2"/>
+        <select id="mlTask2">
+          <option value="regression">regression</option>
+          <option value="classification">classification</option>
+          <option value="forecast">forecast</option>
+        </select>
+        <button onclick="mlUpload()">Upload & Run</button>
+      </div>
+      <pre id="mlOut"></pre>
+    </section>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      async function ping() {
+        const r = await fetch('/api/health');
+        $('health').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function build() {
+        const body = {
+          agentsOnly: $('agentsOnly').checked,
+          teamsOnly: $('teamsOnly').checked,
+          noExpansions: $('noExpansions').checked,
+          clean: $('clean').checked,
+        };
+        const r = await fetch('/api/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        $('buildOut').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function listAgents() {
+        const r = await fetch('/api/list/agents');
+        $('listOut').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function listExpansions() {
+        const r = await fetch('/api/list/expansions');
+        $('listOut').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function validateConfigs() {
+        const r = await fetch('/api/validate', { method: 'POST' });
+        $('validateOut').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function edaPath() {
+        const body = { filePath: $('edaPath').value, target: $('edaTarget').value, maxRows: Number($('edaMaxRows').value) };
+        const r = await fetch('/api/eda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        $('edaOut').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function edaUpload() {
+        const f = $('edaFile').files[0];
+        const fd = new FormData();
+        fd.append('file', f);
+        fd.append('target', $('edaTarget2').value);
+        const r = await fetch('/api/eda/upload', { method: 'POST', body: fd });
+        $('edaOut').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function mlPath() {
+        const body = {
+          task: $('mlTask').value,
+          filePath: $('mlPath').value,
+          target: $('mlTarget').value,
+          features: $('mlFeatures').value,
+          timeCol: $('mlTimeCol').value,
+          horizon: Number($('mlHorizon').value),
+          testSize: Number($('mlTestSize').value),
+        };
+        const r = await fetch('/api/ml', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        $('mlOut').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function mlUpload() {
+        const fd = new FormData();
+        fd.append('file', $('mlFile').files[0]);
+        fd.append('task', $('mlTask2').value);
+        fd.append('target', $('mlTarget2').value);
+        fd.append('features', $('mlFeatures2').value);
+        fd.append('timeCol', $('mlTimeCol2').value);
+        fd.append('horizon', $('mlHorizon2').value);
+        fd.append('testSize', $('mlTestSize2').value);
+        const r = await fetch('/api/ml/upload', { method: 'POST', body: fd });
+        $('mlOut').textContent = JSON.stringify(await r.json(), null, 2);
+      }
+    </script>
+  </body>
+  </html>
+
